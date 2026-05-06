@@ -1,0 +1,75 @@
+# Environment configuration — NEVER COMMIT THESE
+.env
+.env.local
+.env.*.local
+.ctf_config.json
+!.ctf_config.json.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+.venv
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+ctf_client.log
+
+# Cache
+.cache/
+*.cache
+__pycache__/
+
+# CTF workspace files — keep examples, ignore real ones
+*.csv
+!*.example.csv
+!flags.example.csv
+
+# Downloaded challenge files (keep workspace clean)
+downloads/
+
+# Temporary
+tmp/
+temp/

@@ -1,0 +1,46 @@
+# CSL-CtfShitCli — Git Attributes
+# Ensures consistent line endings and file handling across platforms
+
+# Default: normalize line endings on commit
+* text=auto
+
+# Python source files — always LF
+*.py        text eol=lf
+
+# Shell scripts — always LF
+*.sh        text eol=lf
+
+# Config / data files — LF
+*.json      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.toml      text eol=lf
+*.cfg       text eol=lf
+*.ini       text eol=lf
+*.env       text eol=lf
+*.csv       text eol=lf
+
+# Docs — LF
+*.md        text eol=lf
+*.txt       text eol=lf
+*.rst       text eol=lf
+
+# Windows-specific files — CRLF
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binary files — no line ending conversion
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.zip       binary
+*.gz        binary
+*.tar       binary
+*.pdf       binary
+*.pyc       binary
+
+# Mark generated/vendor files for GitHub diff
+*.lock      linguist-generated=true

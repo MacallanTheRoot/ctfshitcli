@@ -1,0 +1,14 @@
+# CSL-CtfShitCli — .ctf_config.json example
+# Copy this to .ctf_config.json in your workspace root (created automatically by 'ctf init')
+# DO NOT commit the real .ctf_config.json — it contains your API token
+
+{
+  "ctf_name": "My CTF Event",
+  "ctf_url": "https://ctf.example.com",
+  "ctf_token": "ctfd_your_api_token_here",
+  "api_timeout": 15,
+  "max_retries": 3,
+  "poll_interval": 30,
+  "log_level": "INFO",
+  "version": "2.0"
+}
