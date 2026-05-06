@@ -10,9 +10,28 @@ Commands:
 
 import asyncio
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Optional
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _slugify(text: str) -> str:
+    """Convert text to a filesystem-safe, URL-friendly slug.
+
+    Examples:
+        "PicoCTF 2025"  → "picoctf-2025"
+        "SQL Injection!" → "sql-injection"
+        "Web/XSS"        → "web-xss"
+    """
+    text = str(text).lower().strip()
+    text = re.sub(r"[^\w\s-]", "", text)   # strip non-word chars
+    text = re.sub(r"[\s_/\\]+", "-", text) # spaces / separators → hyphens
+    text = re.sub(r"-+", "-", text)        # collapse consecutive hyphens
+    text = text.strip("-")
+    return text or "challenge"
 
 import click
 
@@ -115,36 +134,62 @@ def _make_client(config: ConfigManager) -> CTFdAPIClient:
 @cli.command("init")
 @click.argument("ctf_url")
 @click.option("--token", "-t", prompt="API Token", hide_input=True, help="CTFd API token.")
-@click.option("--name",  "-n", default="", help="CTF event name.")
+@click.option("--name",  "-n", default="", help="CTF event name (also used to name the workspace folder).")
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing config.")
-@click.option("--path",  "-p", default=".", type=click.Path(file_okay=False, path_type=Path),
-              help="Workspace directory (default: cwd).")
+@click.option("--path",  "-p", default=None, type=click.Path(file_okay=False, path_type=Path),
+              help="Workspace directory. Auto-derived from --name when omitted (default: ./ctf-workspace).")
 @click.pass_context
 def cmd_init(ctx, ctf_url, token, name, force, path):
     """
-    Initialize a CTF workspace in the current (or specified) directory.
+    Initialize a CTF workspace directory.
 
     \b
-    Creates:
+    If --path is omitted, the folder name is derived from --name (slugified)
+    or defaults to './ctf-workspace'. The directory is created automatically.
+
+    \b
+    Creates inside the workspace:
       .ctf_config.json  — URL, token, settings
       flags.csv         — flag log
       notes/            — notes directory
 
     \b
-    Example:
-      ctf init https://ctf.example.com --token ctfd_... --name "MyEvent 2025"
+    Examples:
+      ctf init https://ctf.example.com -t ctfd_...
+      ctf init https://ctf.example.com -t ctfd_... --name "PicoCTF 2025"
+      ctf init https://ctf.example.com -t ctfd_... --path ./my-workspace
     """
-    workspace = path.resolve()
+    # ── Resolve workspace path ──────────────────────────────────────────────
+    if path is None:
+        folder = _slugify(name) if name.strip() else "ctf-workspace"
+        workspace = Path.cwd() / folder
+    else:
+        workspace = Path(path).resolve()
+
     workspace.mkdir(parents=True, exist_ok=True)
+    ctf_name = name.strip() or "My CTF"
+
     try:
-        init_workspace(workspace, ctf_url, token, name or "My CTF", force)
-        render_workspace_init(workspace, name or "My CTF", ctf_url)
+        init_workspace(workspace, ctf_url, token, ctf_name, force)
+        render_workspace_init(workspace, ctf_name, ctf_url)
+
+        # Tell the user the next step
+        try:
+            rel = workspace.relative_to(Path.cwd())
+        except ValueError:
+            rel = workspace
+        console.print(
+            f"\n[bold cyan]Next:[/bold cyan]  [bold]cd {rel}[/bold]\n"
+        )
+
     except FileExistsError as e:
         render_warning("Already Initialized", str(e))
         sys.exit(1)
     except ValueError as e:
         render_error("Init Failed", str(e))
         sys.exit(1)
+
+
 
 
 @cli.command("add")
@@ -244,37 +289,188 @@ def cmd_scrape(ctx, category, no_files):
 
 
 @cli.command("pull")
-@click.option("--id",  "-i", "challenge_id", type=int, default=None,
+@click.option("--id",        "-i", "challenge_id", type=int, default=None,
               help="Challenge ID (auto-detected from .challenge.json if omitted).")
-@click.option("--out", "-o", type=click.Path(file_okay=False, path_type=Path), default=None,
-              help="Output directory (default: cwd).")
-@click.option("--overwrite", "-f", is_flag=True, help="Re-download existing files.")
+@click.option("--out",       "-o", type=click.Path(file_okay=False, path_type=Path), default=None,
+              help="Output directory (default: cwd). Ignored when --all is used.")
+@click.option("--overwrite", "-f", is_flag=True, help="Re-download already-existing files.")
+@click.option("--all",       "-a", "pull_all",   is_flag=True,
+              help="Sync ALL challenges: scaffold directories and download every attachment.")
 @click.pass_context
-def cmd_pull(ctx, challenge_id, out, overwrite):
+def cmd_pull(ctx, challenge_id, out, overwrite, pull_all):
     """
-    Download all file attachments for a challenge.
+    Download challenge file attachments.
 
-    Auto-detects challenge ID from .challenge.json when run inside a
-    directory created with 'ctf add'.
+    \b
+    Single-challenge mode (default):
+      Auto-detects challenge ID from .challenge.json in cwd.
+      Pass --id to override.
+
+    \b
+    Bulk sync mode (--all):
+      Fetches every visible challenge from CTFd, creates the category/name
+      directory structure, generates README + solve.py templates, and
+      downloads all attached files — all in one shot.
 
     \b
     Examples:
-      ctf pull                       # Auto-detect from .challenge.json
-      ctf pull --id 42               # Explicit ID
-      ctf pull --id 42 --out /tmp/x  # Custom output dir
+      ctf pull                        # Auto-detect from .challenge.json
+      ctf pull --id 42                # Explicit single challenge
+      ctf pull --all                  # Full workspace sync
+      ctf pull --all --overwrite      # Force re-download of existing files
     """
     config = _load_config(ctx.obj)
 
+    # ── BULK SYNC MODE ────────────────────────────────────────────────────────
+    if pull_all:
+        async def _run_all():
+            from src.file_downloader import download_challenge_files
+            from rich.panel import Panel
+            from rich.progress import (
+                Progress, SpinnerColumn, TextColumn,
+                BarColumn, MofNCompleteColumn,
+            )
+
+            # Workspace root is required for add_challenge to know where to write
+            workspace_root = find_workspace_root()
+            if workspace_root is None:
+                render_error(
+                    "No Workspace Found",
+                    "Run 'ctf init <url>' first, then re-run 'ctf pull --all'.",
+                )
+                return 1
+
+            async with _make_client(config) as api:
+                # ── Fetch challenge list ──────────────────────────────────────
+                from rich.status import Status
+                with Status("[cyan]Fetching challenge list…[/cyan]", console=console):
+                    try:
+                        scraper = ChallengeScraper(api)
+                        challenges = await scraper.fetch_challenges(use_cache=False)
+                    except APIError as e:
+                        render_error("Fetch Failed", str(e))
+                        return 1
+
+                if not challenges:
+                    render_info("No Challenges", "The server returned no visible challenges.")
+                    return 0
+
+                total     = len(challenges)
+                scaffolded = 0
+                files_dl  = 0
+                failed    = []  # list of (id, name, reason)
+
+                console.print(
+                    f"\n[bold cyan]⚡ Syncing [white]{total}[/white] challenges "
+                    f"→ [white]{workspace_root}[/white][/bold cyan]\n"
+                )
+
+                # ── Per-challenge progress bar ────────────────────────────────
+                with Progress(
+                    SpinnerColumn(style="cyan"),
+                    TextColumn("[bold cyan]{task.description}", justify="left"),
+                    BarColumn(bar_width=28, style="cyan", complete_style="green"),
+                    MofNCompleteColumn(),
+                    console=console,
+                    transient=False,
+                ) as progress:
+                    task = progress.add_task(
+                        "Starting…", total=total
+                    )
+
+                    for ch in challenges:
+                        ch_id   = ch.get("id")
+                        ch_name = ch.get("name", f"challenge-{ch_id}")
+                        ch_cat  = ch.get("category", "misc")
+                        ch_slug = _slugify(ch_name)
+                        ch_path = f"{_slugify(ch_cat)}/{ch_slug}"
+
+                        progress.update(
+                            task,
+                            description=(
+                                f"[magenta]{_slugify(ch_cat)}[/magenta]"
+                                f"[dim]/[/dim][white]{ch_slug}[/white]"
+                            ),
+                        )
+
+                        try:
+                            # 1. Scaffold directory + templates
+                            created = add_challenge(
+                                challenge_path=ch_path,
+                                challenge_id=ch_id,
+                                points=ch.get("value"),
+                                workspace_root=workspace_root,
+                            )
+                            scaffolded += 1
+
+                            # 2. Download file attachments (quiet — no inner progress bar)
+                            if ch.get("files"):
+                                try:
+                                    await download_challenge_files(
+                                        api_client=api,
+                                        challenge_id=ch_id,
+                                        dest_dir=created["root"],
+                                        overwrite=overwrite,
+                                        show_progress=False,
+                                    )
+                                    files_dl += 1
+                                except (APIError, ValueError) as dl_err:
+                                    console.print(
+                                        f"  [yellow]⚠ #{ch_id} file download: {dl_err}[/yellow]"
+                                    )
+
+                        except Exception as err:
+                            failed.append((ch_id, ch_name, str(err)))
+                            console.print(
+                                f"  [red]✗ #{ch_id} {ch_name!r}: {err}[/red]"
+                            )
+
+                        progress.advance(task)
+
+                    progress.update(task, description="[green]Done[/green]")
+
+                # ── Summary panel ─────────────────────────────────────────────
+                console.print()
+                console.print(
+                    Panel(
+                        f"[bold]Challenges total:[/bold]    {total}\n"
+                        f"[green]✔ Scaffolded:[/green]        {scaffolded}\n"
+                        f"[cyan]📥 Files downloaded:[/cyan]  {files_dl} challenge(s) had files\n"
+                        f"[red]✗ Errors:[/red]            {len(failed)}",
+                        title="[bold cyan]⚡  Pull All — Complete[/bold cyan]",
+                        border_style="cyan",
+                        expand=False,
+                        padding=(1, 2),
+                    )
+                )
+
+                if failed:
+                    console.print("\n[dim red]Failed challenges:[/dim red]")
+                    for fid, fname, ferr in failed:
+                        console.print(
+                            f"  [red]#{fid}[/red] [white]{fname}[/white] "
+                            f"[dim]— {ferr}[/dim]"
+                        )
+
+            return 1 if failed else 0
+
+        sys.exit(asyncio.run(_run_all()))
+
+    # ── SINGLE CHALLENGE MODE ─────────────────────────────────────────────────
     cid = challenge_id
     if cid is None:
         meta = detect_challenge_context()
         if meta and meta.get("id"):
             cid = int(meta["id"])
-            console.print(f"[dim]Auto-detected challenge [cyan]#{cid}[/cyan] "
-                          f"({meta.get('name', '?')}) from .challenge.json[/dim]")
+            console.print(
+                f"[dim]Auto-detected challenge [cyan]#{cid}[/cyan] "
+                f"({meta.get('name', '?')}) from .challenge.json[/dim]"
+            )
         else:
-            render_error("Challenge ID Required",
-                         "Provide --id or run inside a challenge directory.")
+            render_error(
+                "Challenge ID Required",
+                "Provide --id, run inside a challenge directory, or use --all.",
+            )
             sys.exit(1)
 
     dest = (out or Path.cwd()).resolve()
@@ -284,7 +480,9 @@ def cmd_pull(ctx, challenge_id, out, overwrite):
         from src.ui_renderer import render_download_summary
         async with _make_client(config) as api:
             try:
-                downloaded = await download_challenge_files(api, cid, dest, overwrite)
+                downloaded = await download_challenge_files(
+                    api, cid, dest, overwrite, show_progress=True
+                )
                 render_download_summary(downloaded, [], dest)
                 return 0
             except ValueError as e:
@@ -295,6 +493,8 @@ def cmd_pull(ctx, challenge_id, out, overwrite):
                 return 1
 
     sys.exit(asyncio.run(_run()))
+
+
 
 
 @cli.command("submit")
