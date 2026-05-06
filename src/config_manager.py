@@ -14,6 +14,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
@@ -68,15 +69,34 @@ class CTFdConfig(BaseModel):
     @field_validator("ctf_url", mode="before")
     @classmethod
     def validate_ctf_url(cls, v: str) -> str:
-        """Ensure CTFd URL is provided and starts with http:// or https://."""
+        """Normalize CTFd URL to scheme://host — strip any path, query, or fragment.
+
+        CTFd's API is always at <base>/api/v1/..., so passing a URL that
+        includes a path like https://demo.ctfd.io/challenges would break
+        every API call.  We detect and strip the path automatically.
+        """
         if not v:
             raise ValueError("CTF URL must not be empty")
+
         v = str(v).strip().rstrip("/")
+
         if not (v.startswith("https://") or v.startswith("http://")):
             raise ValueError(
                 f"CTF URL must start with http:// or https://, got: {v!r}"
             )
-        return v
+
+        parsed = urlparse(v)
+
+        # Warn and strip if user supplied a path (e.g. /challenges, /login, etc.)
+        if parsed.path and parsed.path != "/":
+            clean = f"{parsed.scheme}://{parsed.netloc}"
+            logger.warning(
+                f"CTF URL path stripped: {v!r} → {clean!r}. "
+                "The base URL must not include a path; /api/v1/* is appended automatically."
+            )
+            return clean
+
+        return f"{parsed.scheme}://{parsed.netloc}"
 
     @field_validator("ctf_token", mode="before")
     @classmethod

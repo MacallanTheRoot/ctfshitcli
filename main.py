@@ -403,21 +403,27 @@ def cmd_pull(ctx, challenge_id, out, overwrite, pull_all):
                             )
                             scaffolded += 1
 
-                            # 2. Download file attachments (quiet — no inner progress bar)
-                            if ch.get("files"):
-                                try:
-                                    await download_challenge_files(
-                                        api_client=api,
-                                        challenge_id=ch_id,
-                                        dest_dir=created["root"],
-                                        overwrite=overwrite,
-                                        show_progress=False,
-                                    )
+                            # 2. Always attempt file download.
+                            #    The challenge LIST endpoint does NOT include the
+                            #    `files` field — only the detail endpoint does.
+                            #    We can't pre-check; just try and handle gracefully.
+                            try:
+                                dl = await download_challenge_files(
+                                    api_client=api,
+                                    challenge_id=ch_id,
+                                    dest_dir=created["root"],
+                                    overwrite=overwrite,
+                                    show_progress=False,
+                                )
+                                if dl:
                                     files_dl += 1
-                                except (APIError, ValueError) as dl_err:
-                                    console.print(
-                                        f"  [yellow]⚠ #{ch_id} file download: {dl_err}[/yellow]"
-                                    )
+                            except ValueError:
+                                # Challenge has no attached files — not an error
+                                pass
+                            except APIError as dl_err:
+                                console.print(
+                                    f"  [yellow]⚠ #{ch_id} file download: {dl_err}[/yellow]"
+                                )
 
                         except Exception as err:
                             failed.append((ch_id, ch_name, str(err)))
