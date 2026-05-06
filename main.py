@@ -58,6 +58,8 @@ from src.workspace_manager import (
     add_challenge,
     detect_challenge_context,
     find_workspace_root,
+    update_workspace_config,
+    CONFIG_KEY_ALIASES,
     WORKSPACE_CONFIG_FILENAME,
 )
 
@@ -654,10 +656,75 @@ def cmd_config(ctx):
         if valid:
             render_success("Token Valid", "API token is active.")
             return 0
-        render_error("Invalid Token", "Token is invalid or expired.")
+        render_error(
+            "Invalid Token",
+            "Token is invalid or expired.\n"
+            "[dim]Update it with:[/dim] [bold cyan]ctf set token <new_token>[/bold cyan]"
+        )
         return 1
 
     sys.exit(asyncio.run(_run()))
+
+
+@cli.command("set")
+@click.argument("key")
+@click.argument("value")
+@click.pass_context
+def cmd_set(ctx, key, value):
+    """
+    Update a single config value in the workspace .ctf_config.json.
+
+    \b
+    Keys (aliases accepted):
+      token / ctf_token      — API token
+      url   / ctf_url        — CTFd platform URL
+      name  / ctf_name       — CTF event name
+      timeout / api_timeout  — Request timeout in seconds
+      retries / max_retries  — Max retry attempts
+      poll  / poll_interval  — Scoreboard poll interval in seconds
+      log   / log_level      — Log level (DEBUG/INFO/WARNING/ERROR)
+
+    \b
+    Examples:
+      ctf set token ctfd_abc123...        # replace expired token
+      ctf set url https://ctf.example.com # fix the base URL
+      ctf set timeout 30                  # increase request timeout
+      ctf set name "My CTF 2025"          # rename the event
+    """
+    try:
+        canonical, written = update_workspace_config(key, value)
+    except FileNotFoundError as e:
+        render_error("Workspace Not Found", str(e))
+        sys.exit(1)
+    except ValueError as e:
+        render_error("Invalid Key or Value", str(e))
+        # Print the valid keys hint
+        from rich.table import Table as RTable
+        t = RTable(border_style="bright_black", header_style="bold cyan", show_header=True)
+        t.add_column("Alias",     style="cyan",   width=16)
+        t.add_column("Config Key", style="white",  width=16)
+        for alias, canon in sorted(CONFIG_KEY_ALIASES.items()):
+            if alias != canon:
+                t.add_row(alias, canon)
+        console.print(t)
+        sys.exit(1)
+
+    # Mask token in output
+    display = (
+        written[:12] + "..." + written[-4:]
+        if canonical == "ctf_token" and len(str(written)) > 16
+        else str(written)
+    )
+
+    console.print(
+        f"\n[bold green]✔[/bold green]  [bold]{canonical}[/bold] "
+        f"updated → [cyan]{display}[/cyan]\n"
+    )
+    console.print(
+        "[dim]Run [bold]ctf config[/bold] to verify, "
+        "or [bold]ctf list[/bold] to test the connection.[/dim]\n"
+    )
+
 
 
 @cli.command("categories")

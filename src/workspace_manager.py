@@ -462,3 +462,95 @@ def update_challenge_meta(
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     logger.debug(f"Updated .challenge.json: {kwargs}")
+
+
+# ─── Workspace Config Update ──────────────────────────────────────────────────
+
+# Mapping of user-friendly key aliases → actual .ctf_config.json field names
+CONFIG_KEY_ALIASES: dict = {
+    "token":         "ctf_token",
+    "ctf_token":     "ctf_token",
+    "url":           "ctf_url",
+    "ctf_url":       "ctf_url",
+    "name":          "ctf_name",
+    "ctf_name":      "ctf_name",
+    "timeout":       "api_timeout",
+    "api_timeout":   "api_timeout",
+    "retries":       "max_retries",
+    "max_retries":   "max_retries",
+    "poll":          "poll_interval",
+    "poll_interval": "poll_interval",
+    "log":           "log_level",
+    "log_level":     "log_level",
+}
+
+# Fields that should be cast to int before writing
+_INT_FIELDS = {"api_timeout", "max_retries", "poll_interval"}
+
+
+def update_workspace_config(
+    key: str,
+    value: str,
+    workspace_root: Optional[Path] = None,
+) -> tuple[str, object]:
+    """
+    Update a single field in the workspace .ctf_config.json.
+
+    Accepts user-friendly aliases (e.g. 'token', 'url', 'timeout').
+
+    Args:
+        key:            Config key or alias (see CONFIG_KEY_ALIASES).
+        value:          New value as string (cast to int for numeric fields).
+        workspace_root: Workspace root path. Auto-detected if None.
+
+    Returns:
+        (canonical_key, coerced_value) — what was actually written.
+
+    Raises:
+        FileNotFoundError: Workspace or config file not found.
+        ValueError:        Unknown key or invalid numeric value.
+    """
+    # Resolve alias
+    canonical = CONFIG_KEY_ALIASES.get(key.lower().replace("-", "_"))
+    if canonical is None:
+        valid = sorted(set(CONFIG_KEY_ALIASES.keys()))
+        raise ValueError(
+            f"Unknown config key {key!r}.\n"
+            f"Valid keys: {', '.join(valid)}"
+        )
+
+    # Coerce type
+    if canonical in _INT_FIELDS:
+        try:
+            coerced = int(value)
+        except ValueError:
+            raise ValueError(
+                f"Key '{canonical}' requires an integer value, got: {value!r}"
+            )
+    else:
+        coerced = str(value).strip()
+
+    # Locate workspace
+    root = workspace_root or find_workspace_root()
+    if root is None:
+        raise FileNotFoundError(
+            "No CTF workspace found. Run 'ctf init' first."
+        )
+
+    config_path = root / WORKSPACE_CONFIG_FILENAME
+    if not config_path.exists():
+        raise FileNotFoundError(f"{WORKSPACE_CONFIG_FILENAME} not found at {root}")
+
+    # Read → patch → write
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    old_value = data.get(canonical, "<not set>")
+    data[canonical] = coerced
+
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    logger.info(f"Config updated: {canonical} = {coerced!r} (was {old_value!r})")
+    return canonical, coerced
+
