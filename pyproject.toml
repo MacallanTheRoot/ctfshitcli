@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "csl-ctfshitcli"
+version = "2.0.0"
+description = "CSL-CtfShitCli — CTFd Swiss Army Knife CLI"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+authors = [
+    { name = "macallantheroot" },
+]
+keywords = ["ctf", "ctfd", "security", "hacking", "cli"]
+dependencies = [
+    "aiohttp>=3.9.0",
+    "python-dotenv>=1.0.0",
+    "rich>=13.7.0",
+    "pydantic>=2.0.0",
+    "click>=8.1.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.scripts]
+# Uses csl_ctf_entry to avoid `main` module name conflicts with other packages
+ctf = "csl_ctf_entry:main"
+
+[project.urls]
+Homepage   = "https://github.com/MacallanTheRoot/CSL-CtfShitCli"
+Repository = "https://github.com/MacallanTheRoot/CSL-CtfShitCli"
+
+[tool.setuptools]
+py-modules = ["csl_ctf_entry", "main"]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
