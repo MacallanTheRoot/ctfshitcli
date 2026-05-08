@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "csl-ctfshitcli"
-version = "2.0.0"
+version = "3.0.0"
 description = "CSL-CtfShitCli — CTFd Swiss Army Knife CLI"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -20,6 +20,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "click>=8.1.0",
     "requests>=2.31.0",
+    "watchdog>=3.0.0",
 ]
 
 [project.optional-dependencies]

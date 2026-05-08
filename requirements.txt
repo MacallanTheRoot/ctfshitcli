@@ -6,3 +6,5 @@ requests>=2.31.0
 click>=8.1.0
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
+watchdog>=3.0.0
+

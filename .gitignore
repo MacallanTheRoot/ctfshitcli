@@ -1,43 +1,37 @@
-# Environment configuration — NEVER COMMIT THESE
+# ── Secrets & Credentials ────────────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
 .ctf_config.json
 !.ctf_config.json.example
 
-# Python
+# ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
 *.egg
+*.egg-info/
+dist/
+build/
+.eggs/
 MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
+wheels/
+sdist/
+var/
+parts/
+lib/
+lib64/
 
-# Virtual environments
-venv/
-ENV/
-env/
+# ── Virtual Environments ─────────────────────────────────────────────────────
 .venv/
-.venv
+venv/
+env/
+ENV/
 
-# IDE / Editor
+# ── IDE & Editor ─────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
@@ -46,30 +40,25 @@ env/
 .DS_Store
 Thumbs.db
 
-# Testing
+# ── Testing & Coverage ───────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
+.mypy_cache/
+.ruff_cache/
 
-# Logs
+# ── Logs & Runtime ───────────────────────────────────────────────────────────
 *.log
-logs/
 ctf_client.log
 
-# Cache
-.cache/
-*.cache
-__pycache__/
-
-# CTF workspace files — keep examples, ignore real ones
-*.csv
-!*.example.csv
+# ── CTF Workspace Files ──────────────────────────────────────────────────────
+# Keep example files; ignore real ones that contain secrets/data
+flags.csv
 !flags.example.csv
-
-# Downloaded challenge files (keep workspace clean)
 downloads/
 
-# Temporary
+# ── Temp ─────────────────────────────────────────────────────────────────────
 tmp/
 temp/
+*.tmp

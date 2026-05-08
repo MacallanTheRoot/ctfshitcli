@@ -1,447 +1,161 @@
 <div align="center">
-
-```
-   ██████╗███████╗██╗       CSL-CtfShitCli
-  ██╔════╝██╔════╝██║       CTFd Swiss Army Knife  v2.0
-  ██║     ███████╗██║
-  ██║     ╚════██║██║       dev by macallantheroot
-  ╚██████╗███████║███████╗
-   ╚═════╝╚══════╝╚══════╝
-```
-
-**CSL-CtfShitCli** — a definitive, high-performance CTF workspace and API management CLI.  
-Built for speed. Built for the terminal. Built by **[macallantheroot](https://github.com/MacallanTheRoot)**.
-
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![CTFd](https://img.shields.io/badge/CTFd-API%20v1-purple)](https://docs.ctfd.io)
-[![rich](https://img.shields.io/badge/UI-rich-cyan)](https://github.com/Textualize/rich)
-[![click](https://img.shields.io/badge/CLI-click-orange)](https://click.palletsprojects.com)
-
+  <a href="#english">🇺🇸 English</a> | <a href="#turkce">🇹🇷 Türkçe</a>
 </div>
 
----
+<a id="english"></a>
+# CSC - CtfShitCli v3.0
 
-## ✨ Features
+The ultimate CTFd Swiss Army Knife CLI designed for security researchers, CTF competitors, and team leads. Stop navigating clunky web interfaces during time-critical events—manage your entire CTF workflow directly from the terminal.
 
-### 🗂️ Workspace Management
+![Version](https://img.shields.io/badge/version-v3.0-blue?style=for-the-badge)
+![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue?style=for-the-badge)
+![Click](https://img.shields.io/badge/click-8.1%2B-orange?style=for-the-badge)
 
-| Command | What it does |
+## 🚀 Core Modules & Features
+
+### 🧠 Autonomous AI Analyzer (`ctf ai`)
+When you are stuck on a challenge, deploy the Red Team AI Assistant. Run `ctf ai analyze` inside a challenge directory, and the agent will automatically read your source codes and `challenge.txt` description. It discovers the best available Gemini model for your API key, bypasses rate-limits via fallback loops, and generates a cyberpunk-themed, professional vulnerability analysis and exploitation strategy report directly in your terminal.
+
+### 📜 Universal Script Generator (`ctf script`)
+Stop rewriting the same boilerplate code for every competition! The Script Generator provides an arsenal of categorized, ready-to-use scripts:
+- **Web:** Blind SQLi payloads, JWT Forgers, Padding Oracle scripts, SSTI Payload Generators.
+- **Crypto:** RSA solvers, Z3 Theorem Provers, AES ECB Oracle Exploiters.
+- **Pwn:** Standard `ret2libc` ROP skeletons using `pwntools`.
+- **Forensics:** PCAP HTTP & DNS extractors using `scapy`.
+- **OSINT:** Cross-platform username recon & enumeration scripts.
+- **Stego:** LSB Extractors, Exif parsers.
+Run `ctf script list` to see categories, and `ctf script generate <name>` to drop the solver into your current directory.
+
+### 👁️ Watchdog & Auto Submitter (`ctf watch`)
+Never worry about submitting flags manually again. The daemon runs in the background and watches your workspace for any `flag.txt` creation. It dynamically uses your custom `flag_format` (set via `ctf set flag_format CTF{}`) to parse the flag using regex, submits it to the CTFd API, logs the attempt locally, and can even trigger a **Discord Webhook** notification to alert your team!
+
+### 📥 Smart Downloader & Password Cracker (`ctf pull`)
+Downloading attachments is now fully asynchronous and safe against zip-slip path traversal attacks. Even better: if a zip file is password protected and the challenge description contains the password (e.g., "Password: 1234"), `ctf pull --extract` automatically extracts the password via Regex and unlocks the archive for you.
+
+### 🏗️ Deterministic Workspace Manager
+- **`ctf init`:** Initializes a local SQLite cache and `.ctf_config.json`.
+- **`ctf set`:** Dynamically update your configurations like `ctf set flag_format CTF{}` or `ctf set llm_api_key AIza...` without touching files.
+- **`ctf add`:** Instantly scaffold a challenge directory (`web/easy-sqli`) with a clean `challenge.txt` setup, ready for action.
+
+### 📊 Live Tracking & Reporting
+- **`ctf track`:** Launch a live scoreboard polling tracker in your terminal.
+- **`ctf export writeups`:** Compile all your solved challenges and scripts into a single, beautifully formatted `writeups.md` file for your blog or GitHub.
+
+## 📦 Installation
+
+```bash
+git clone https://github.com/MacallanTheRoot/CSL-CtfShitCli.git
+cd CSL-CtfShitCli
+
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+pip install -e .
+```
+
+## 🎮 CLI Reference
+
+| Command | Description |
 |---|---|
-| `ctf init <url>` | Auto-creates a workspace folder (derived from `--name`), writes config, flag log, notes dir |
-| `ctf add <cat/name>` | Scaffold a challenge dir with `README.md`, `solve.py`, `.challenge.json` |
+| `ctf init <url>` | Initialize a new workspace directory for an event. |
+| `ctf add <cat/name>` | Scaffold a challenge directory. |
+| `ctf list [--offline]` | List challenges (grouped or flat), optionally from cache. |
+| `ctf pull [--all] [--extract]` | Download and safely extract challenge file attachments. |
+| `ctf submit <flag>` | Submit a flag (auto-detects challenge ID). |
+| `ctf bulk <csv>` | Bulk-submit flags from a CSV file. |
+| `ctf hint list <id>` | List hints for a specific challenge. |
+| `ctf hint unlock <id>` | Unlock a specific hint. |
+| `ctf submissions <id>` | View your local flag submission history. |
+| `ctf export writeups` | Export all solved challenges to a single Markdown file. |
+| `ctf script list` | List built-in CTF automation and solver scripts. |
+| `ctf script generate <name>` | Generate an automation script in the cwd. |
+| `ctf ai analyze` | Autonomous vulnerability and code analysis using LLM. |
+| `ctf watch [--all]` | Monitor `flag.txt` files and auto-submit upon changes. |
+| `ctf sync --offline` | Sync the live workspace data to the offline SQLite cache. |
+| `ctf track` | Launch the live scoreboard polling tracker. |
+| `ctf categories` | Display category overview with solve statistics. |
+| `ctf config` | Show and validate the active configuration. |
+| `ctf set <key> <value>` | Update a config value in-place. |
 
-### 🌐 CTFd API Integration
+---
 
-| Command | What it does |
+<a id="turkce"></a>
+# CSC - CtfShitCli v3.0
+
+Güvenlik araştırmacıları, CTF yarışmacıları ve takım kaptanları için tasarlanmış nihai CTFd İsviçre Çakısı CLI aracı. Zamanın kritik olduğu yarışmalarda hantal web arayüzleriyle uğraşmayı bırakın; tüm CTF iş akışınızı doğrudan terminalden yönetin.
+
+![Sürüm](https://img.shields.io/badge/s%C3%BCr%C3%BCm-v3.0-blue?style=for-the-badge)
+![Lisans](https://img.shields.io/badge/lisans-MIT-green?style=for-the-badge)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue?style=for-the-badge)
+![Click](https://img.shields.io/badge/click-8.1%2B-orange?style=for-the-badge)
+
+## 🚀 Temel Modüller ve Özellikler
+
+### 🧠 Otonom AI Analizörü (`ctf ai`)
+Bir soruda tıkandığınızda Red Team AI Ajanınızı sahaya sürün. Bulunduğunuz dizinde `ctf ai analyze` komutunu çalıştırdığınızda ajan, kaynak kodları ve `challenge.txt` açıklamasını otomatik okur. Google Gemini API üzerinden sahip olduğunuz en güçlü modeli "Otomatik Keşif" ile bulur, kota/yük sorunlarını yedekleme (fallback) döngüsüyle atlatır ve size terminalinizde siberpunk temalı, profesyonel bir zafiyet analiz raporu sunar.
+
+### 📜 Evrensel Script Üretici (`ctf script`)
+Her yarışmada aynı kodları baştan yazmaya son! Evrensel Script Üretici, size kategorize edilmiş bir cephanelik sunar:
+- **Web:** Kör SQLi (Blind SQLi) payloadları, JWT Sahteciliği (Forge), SSTI Payload Jeneratörleri.
+- **Crypto:** RSA çözücüler, Z3 Theorem Prover iskeletleri, AES ECB Oracle exploit taslakları.
+- **Pwn:** `pwntools` tabanlı standart `ret2libc` ROP saldırı iskeletleri.
+- **Forensics:** `scapy` ile otomatik PCAP HTTP ve DNS analizcileri.
+- **OSINT:** Popüler platformlarda (GitHub, Twitter vb.) hızlı username recon betikleri.
+- **Stego:** LSB Çıkarıcılar (Extractor), Exif analizcileri.
+Kategorileri görmek için `ctf script list`, istediğiniz betiği dizine kopyalamak için `ctf script generate <isim>` komutunu kullanın.
+
+### 👁️ Watchdog ve Otomatik Gönderici (`ctf watch`)
+Flag bulduğunuzda submit etmekle uğraşmayın. Arka planda çalışan bu iblis (daemon), çalışma alanınızı izler. Bir yere `flag.txt` yazıldığı an milisaniyeler içinde Regex ile flag'i yakalar. Hatta `ctf set flag_format CTF{}` komutuyla tanımladığınız özel formatlara dinamik uyum sağlar. Başarılı gönderimleri lokal diske kaydeder ve dilerseniz takımınızın **Discord kanalına anında Webhook** atar!
+
+### 📥 Akıllı İndirici ve Şifre Kırıcı (`ctf pull`)
+Dosya ekleri `aiohttp` ile asenkron ve çoklu olarak inerken, zip-slip zafiyetlerine karşı güvenle çıkarılır (`--extract`). En güzel yanı: Eğer indirilen arşiv parola korumalıysa ve soru açıklamasında (örn: "Şifre: 1234") parola verilmişse, ajanımız bu parolayı Regex ile algılar ve arşivi sizin yerinize otomatik kırarak dosyaları dizine serer!
+
+### 🏗️ Deterministik Çalışma Alanı Yöneticisi
+- **`ctf init`:** Lokal bir SQLite önbelleği ve `.ctf_config.json` başlatır.
+- **`ctf set`:** Dosyalara dokunmadan `flag_format`, `llm_api_key`, `discord_webhook_url` gibi anahtarları canlı olarak günceller.
+- **`ctf add`:** CTFd kategorisine göre temiz bir `challenge.txt` iskeleti oluşturarak ortamı analize hazır hale getirir.
+
+### 📊 Canlı Takip ve Raporlama
+- **`ctf track`:** Rakiplerinizin ilerleyişini terminalinizden anlık scoreboard üzerinden izleyin.
+- **`ctf export writeups`:** Çözdüğünüz tüm soruları, kodladığınız çözüm betiklerini ve açıklamaları tek bir harika `writeups.md` dosyasına dönüştürerek blogunuzda paylaşmaya hazır hale getirin.
+
+## 📦 Kurulum
+
+```bash
+git clone https://github.com/MacallanTheRoot/CSL-CtfShitCli.git
+cd CSL-CtfShitCli
+
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+pip install -e .
+```
+
+## 🎮 Komut Referansı
+
+| Komut | Açıklama |
 |---|---|
-| `ctf list` | List all challenges grouped by category with solve status & points |
-| `ctf pull` | Download file attachments for one challenge (auto-detects from cwd) |
-| `ctf pull --all` | **Full workspace sync** — scaffold every challenge + download all files |
-| `ctf submit <flag>` | Submit a flag — auto-detects challenge ID from cwd |
-| `ctf bulk <csv>` | Bulk-submit flags from a CSV file with jitter rate-limiting |
-| `ctf track` | Real-time scoreboard polling with change alerts |
-| `ctf config` | Display and validate current configuration |
-| `ctf categories` | List challenge categories with solve statistics |
+| `ctf init <url>` | Yeni bir etkinlik için çalışma alanı başlatır. |
+| `ctf add <cat/name>` | Temiz bir challenge dizin iskeleti oluşturur. |
+| `ctf list [--offline]` | Challenge'ları listeler (gerekirse çevrimdışı önbellekten). |
+| `ctf pull [--all] [--extract]` | Dosya eklerini indirir ve güvenle klasöre çıkartır. |
+| `ctf submit <flag>` | Flag gönderir (Challenge ID'sini otomatik algılar ve formatlar). |
+| `ctf bulk <csv>` | CSV dosyasından toplu flag gönderimi yapar. |
+| `ctf hint list <id>` | Belirli bir soruya ait ipuçlarını listeler. |
+| `ctf hint unlock <id>` | Belirli bir ipucunun kilidini açar. |
+| `ctf submissions <id>` | Lokal flag deneme geçmişinizi gösterir. |
+| `ctf export writeups` | Çözülen tüm soruları tek bir Markdown dosyasına dönüştürür. |
+| `ctf script list` | CTF'lerde zaman kazandıran hazır otomasyon betiklerini listeler. |
+| `ctf script generate <name>` | Seçilen otomasyon scriptini bulunduğunuz dizine kaydeder. |
+| `ctf ai analyze` | Otonom zafiyet ve kod analizi yapar (LLM tabanlı). |
+| `ctf watch [--all]` | `flag.txt` dosyalarını izler ve değiştiğinde otomatik gönderir. |
+| `ctf sync --offline` | Çalışma alanı verilerini çevrimdışı önbelleğe eşitler. |
+| `ctf track` | Canlı skor tablosu takip aracını başlatır. |
+| `ctf categories` | Çözüm istatistikleriyle kategori özetini gösterir. |
+| `ctf config` | Aktif yapılandırmayı gösterir ve doğrular. |
+| `ctf set <anahtar> <değer>` | Bir yapılandırma değerini anında günceller. |
 
 ---
-
-## ⚡ Quick Start
-
-### 1. Install
-
-```bash
-git clone https://github.com/MacallanTheRoot/CSL-CtfShitCli
-cd CSL-CtfShitCli/ctfshit
-pip install -r requirements.txt
-```
-
-### 2. Initialize a workspace
-
-```bash
-# Folder name is auto-derived from --name: "picoctf-2025/"
-ctf init https://ctf.example.com \
-  --token ctfd_your_token_here \
-  --name "PicoCTF 2025"
-
-# The CLI tells you what to do next:
-#   Next: cd picoctf-2025
-
-cd picoctf-2025
-```
-
-> **No `--name`?** Defaults to `ctf-workspace/`.  
-> **Want a custom path?** Use `--path ./mydir`.
-
-### 3. One-shot full sync
-
-```bash
-# Inside the workspace — scaffolds every challenge + downloads all files
-ctf pull --all
-```
-
-This single command:
-1. Fetches the full challenge list from CTFd (cache bypassed)
-2. Creates `<category>/<challenge>/` directories with `README.md` + `solve.py`
-3. Downloads every file attachment into the matching directory
-4. Shows a live progress bar and a summary panel at the end
-5. Logs any per-challenge errors in red and keeps going — **never crashes the whole loop**
-
-### 4. Work a challenge manually
-
-```bash
-# Browse what's available
-ctf list
-ctf list --category web
-
-# Add and enter a specific challenge
-ctf add web/easy-sqli --id 12 --points 300
-cd web/easy-sqli
-
-# Download its files
-ctf pull
-
-# Solve it, then submit
-ctf submit 'flag{blind_sqli_union_ftw}'
-```
-
-### 5. Track the scoreboard
-
-```bash
-# In a separate terminal
-ctf track
-ctf track --teams "MyTeam" "Rivals" --limit 20
-```
-
----
-
-## 🔧 Command Reference
-
-### `ctf init <CTF_URL>`
-
-Initialize a CTF workspace directory.
-
-```
-Options:
-  -t, --token TEXT      CTFd API token (prompted if omitted)
-  -n, --name  TEXT      CTF event name — also used to name the workspace folder
-  -f, --force           Overwrite an existing workspace config
-  -p, --path  DIR       Custom directory (default: auto-derived from --name)
-```
-
-**Folder name logic:**
-
-| Scenario | Resulting folder |
-|---|---|
-| `--name "PicoCTF 2025"` | `./picoctf-2025/` |
-| `--name "HackTheBox CTF!"` | `./hackthebox-ctf/` |
-| *(no `--name`)* | `./ctf-workspace/` |
-| `--path ./custom` | `./custom/` |
-
-**Created files:**
-
-```
-<workspace>/
-├── .ctf_config.json   ← stores URL, token, all settings
-├── flags.csv          ← flag log (challenge_id, flag, category, name)
-└── notes/             ← free-form notes directory
-```
-
----
-
-### `ctf add <category>/<name>`
-
-Scaffold a challenge directory with templates.
-
-```bash
-ctf add web/easy-sqli
-ctf add crypto/rsa-basics --id 12 --points 300 --desc "Break the RSA"
-```
-
-Creates inside the workspace:
-
-```
-web/easy-sqli/
-├── README.md         ← Description / Enumeration / Exploitation / Flag sections
-├── solve.py          ← Exploit script skeleton with argparse + solve() function
-└── .challenge.json   ← {"id": 12, "category": "web", "points": 300, "solved": false}
-```
-
-OSINT/stego categories generate `notes.txt` instead of `solve.py`.
-
----
-
-### `ctf pull [--all]`
-
-Download challenge file attachments.
-
-```
-Options:
-  -i, --id INTEGER    Challenge ID (auto-detected from .challenge.json if omitted)
-  -o, --out DIR       Output directory (default: cwd — ignored with --all)
-  -f, --overwrite     Re-download files that already exist
-  -a, --all           Full workspace sync: scaffold + download every challenge
-```
-
-**Single mode** — run inside a challenge directory:
-
-```bash
-cd web/easy-sqli
-ctf pull            # auto-detects #12 from .challenge.json
-ctf pull --id 42    # explicit ID
-```
-
-**Bulk sync mode** — run from workspace root:
-
-```bash
-ctf pull --all                  # scaffold + download everything
-ctf pull --all --overwrite      # force re-download of existing files
-```
-
-`--all` progress output:
-
-```
-⚡ Syncing 47 challenges → /home/user/picoctf-2025
-
-⠋ web/easy-sqli  ████████████░░░░░░░░  12/47
-  ⚠ #31 file download: has no attached files.   ← non-fatal, continues
-
-╭──────────── ⚡  Pull All — Complete ─────────────╮
-│  Challenges total:    47                         │
-│  ✔ Scaffolded:        47                         │
-│  📥 Files downloaded: 23 challenge(s) had files  │
-│  ✗ Errors:            0                          │
-╰──────────────────────────────────────────────────╯
-```
-
----
-
-### `ctf submit <flag>`
-
-Submit a flag for a challenge.
-
-```bash
-cd web/easy-sqli
-ctf submit 'flag{xss_pwned}'        # auto-detects ID from .challenge.json
-ctf submit 'flag{...}' --id 42      # explicit ID from anywhere
-```
-
-On correct submission, `.challenge.json` is automatically updated:  
-`"solved": true, "flag": "flag{xss_pwned}"`
-
----
-
-### `ctf list`
-
-Browse all challenges grouped by category.
-
-```bash
-ctf list                  # grouped by category (default)
-ctf list --flat           # flat table
-ctf list --category web   # filter by category
-ctf list --no-cache       # bypass 5-minute cache
-```
-
----
-
-### `ctf bulk <csv>`
-
-Bulk-submit flags from a CSV file with jitter delays.
-
-```csv
-challenge_id,flag
-1,flag{first_challenge}
-5,flag{websecurity_100}
-```
-
-```bash
-ctf bulk flags.csv --details
-```
-
----
-
-### `ctf track`
-
-Real-time scoreboard polling. Press **Ctrl+C** to stop.
-
-```bash
-ctf track
-ctf track --teams "MyTeam" "Rivals" --limit 20
-```
-
----
-
-### `ctf config`
-
-Display and validate the current configuration (token masked).
-
-```bash
-ctf config
-```
-
----
-
-## ⚙️ Configuration
-
-CSL-CtfShitCli uses a **priority cascade** — walks up the directory tree (like git) to find the nearest `.ctf_config.json`, then falls back to `.env`.
-
-### `.ctf_config.json` (workspace config — created by `ctf init`)
-
-```json
-{
-  "ctf_name": "PicoCTF 2025",
-  "ctf_url": "https://ctf.example.com",
-  "ctf_token": "ctfd_your_token_here",
-  "api_timeout": 15,
-  "max_retries": 3,
-  "poll_interval": 30,
-  "log_level": "INFO"
-}
-```
-
-> ⚠️ **Never commit this file** — it contains your API token. It's in `.gitignore` by default.
-
-### `.env` (legacy fallback)
-
-```bash
-cp .env.example .env
-```
-
-```env
-CTF_URL=https://ctf.example.com
-CTF_TOKEN=ctfd_your_api_token
-POLL_INTERVAL=30
-API_TIMEOUT=15
-MAX_RETRIES=3
-LOG_LEVEL=INFO
-```
-
-Get your token: `CTFd → Settings → API Token`
-
----
-
-## 🏗️ Project Structure
-
-```
-ctfshit/
-├── main.py                     ← CLI entry point (click + all commands)
-├── requirements.txt
-├── .env.example                ← Legacy config template
-├── .ctf_config.json.example    ← Workspace config template
-├── .gitignore
-├── .gitattributes
-├── LICENSE
-├── README.md
-└── src/
-    ├── __init__.py             ← v2.0.0
-    ├── api_client.py           ← Async HTTP client (aiohttp, retry, backoff)
-    ├── challenge_scraper.py    ← Challenge fetch + 5-min cache
-    ├── config_manager.py       ← JSON + .env config with auto-detection
-    ├── file_downloader.py      ← Streaming downloader (progress / silent modes)
-    ├── flag_submitter.py       ← Single + bulk flag submission
-    ├── scoreboard_tracker.py   ← Async background scoreboard polling
-    ├── ui_renderer.py          ← All rich terminal output
-    └── workspace_manager.py    ← Workspace init + challenge scaffolding
-```
-
----
-
-## 🔌 Resilience & Rate-Limit Handling
-
-| Feature | Detail |
-|---|---|
-| **Exponential backoff** | `base × 2^attempt` ± 20% jitter, capped at 60s |
-| **HTTP 429 handling** | Auto-detects rate limiting, backs off and retries |
-| **5xx retry** | Server errors retry with backoff (401/404 are not retried) |
-| **Timeout protection** | Configurable per-request timeout (default 15s) |
-| **Connection pooling** | aiohttp TCPConnector, 20 max connections |
-| **Jitter on bulk submit** | 0.5–3s random delay between flag submissions |
-| **`pull --all` resilience** | Per-challenge try/except — one bad challenge never kills the loop |
-
----
-
-## 📦 Dependencies
-
-```
-aiohttp>=3.9.0        # Async HTTP client
-python-dotenv>=1.0.0  # .env loading
-rich>=13.7.0          # Terminal UI
-pydantic>=2.0.0       # Config validation
-click>=8.1.0          # CLI framework
-requests>=2.31.0      # HTTP utility
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-```
-
----
-
-## 🛠️ Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `No CTF workspace found` | Run `ctf init <url>` first, or `cd` into your workspace |
-| `Challenge ID Required` | Run `ctf add` first, or provide `--id N` |
-| `AuthenticationError` | Check your token in `.ctf_config.json` or `.env` |
-| `HTTP 429 / rate limited` | Built-in backoff handles this automatically |
-| `Network timeout` | Increase `api_timeout` in config; check CTFd status |
-| `Already solved` panel | Yellow — CTFd confirms it's already done |
-| `pull --all` stops on one challenge | It doesn't — errors are logged and the loop continues |
-
----
-
-## 🔐 Security Notes
-
-- API token stored in `.ctf_config.json` or `.env` — **both are git-ignored by default**
-- Token is masked in all console output: `ctfd_xxxxx...xxxx`
-- `ctf_client.log` never writes tokens in plain text
-- Recommended permissions: `chmod 600 .ctf_config.json`
-
----
-
-## 📚 CTFd API Reference
-
-| Endpoint | Used for |
-|---|---|
-| `GET /api/v1/challenges` | List all challenges |
-| `GET /api/v1/challenges/{id}` | Challenge detail + file list |
-| `POST /api/v1/challenges/attempt` | Submit flag |
-| `GET /api/v1/scoreboard` | Leaderboard |
-| `GET /api/v1/users/me` | Token validation |
-
----
-
-## 🚀 Programmatic API
-
-```python
-import asyncio
-from src.config_manager import resolve_config
-from src.api_client import CTFdAPIClient
-from src.challenge_scraper import ChallengeScraper
-from src.flag_submitter import FlagSubmitter
-
-async def example():
-    config = resolve_config()
-    async with CTFdAPIClient(config.ctf_url, config.api_token) as api:
-        challenges = await ChallengeScraper(api).fetch_challenges()
-        result = await FlagSubmitter(api).submit_single_flag(42, "flag{test}")
-        print(result)
-
-asyncio.run(example())
-```
-
----
-
-## 📄 License
-
-MIT — see [LICENSE](LICENSE).
-
----
-
-<div align="center">
-
-**Built with ❤️ for the CTF community**  
-by **[macallantheroot](https://github.com/MacallanTheRoot)**
-
-*Go hack something.*
-
-</div>
+**Lisans:** MIT  
+**Geliştirici:** [MacallanTheRoot](https://github.com/MacallanTheRoot)

@@ -53,6 +53,13 @@ from src.ui_renderer import (
     render_config_panel,
     render_challenges_table,
 )
+
+from src.offline_cache import OfflineCache, cache_exists
+from src.hint_manager import HintManager
+from src.submission_history import find_attempts_for_challenge
+from src.writeup_exporter import export_writeups
+from src.watch_daemon import start_watch_daemon
+from src.ui_renderer import render_hints_table, render_submission_history
 from src.workspace_manager import (
     init_workspace,
     add_challenge,
@@ -75,19 +82,41 @@ def _setup_logging(level: str) -> None:
 
 # ── Banner ────────────────────────────────────────────────────────────────────
 
-BANNER = """\
-[bold cyan]
-   ██████╗███████╗██╗      [bold white]CSL[/bold white][bold cyan]-CtfShitCli[/bold cyan]
-  ██╔════╝██╔════╝██║      [dim]CTFd Swiss Army Knife  v2.0[/dim]
-  ██║     ███████╗██║
-  ██║     ╚════██║██║      [dim]dev by [link=https://github.com/MacallanTheRoot]macallantheroot[/link][/dim]
-  ╚██████╗███████║███████╗
-   ╚═════╝╚══════╝╚══════╝[/bold cyan]
-"""
+from rich.align import Align
+from rich.panel import Panel as RichPanel
+
+def _print_banner() -> None:
+    content = Align.center(
+        "[bold white]CSC - CtfShitCli[/bold white]\n"
+        "[dim]developed by macallantheroot[/dim]\n"
+        "[dim cyan]github.com/macallanTheRoot[/dim cyan]",
+        vertical="middle",
+    )
+    console.print(
+        Align.center(
+            RichPanel(
+                content,
+                border_style="cyan",
+                padding=(0, 6),
+                expand=False,
+            )
+        )
+    )
+    console.print()
+
 
 # ── CLI Group ─────────────────────────────────────────────────────────────────
 
+class CSCGroup(click.Group):
+    """click.Group subclass — injects the banner before every help page."""
+
+    def get_help(self, ctx: click.Context) -> str:
+        _print_banner()
+        return super().get_help(ctx)
+
+
 @click.group(
+    cls=CSCGroup,
     context_settings={"help_option_names": ["-h", "--help"], "max_content_width": 100},
     invoke_without_command=True,
 )
@@ -98,14 +127,15 @@ BANNER = """\
               default="INFO", show_default=True, help="Log verbosity (ctf_client.log).")
 @click.pass_context
 def cli(ctx: click.Context, env: Optional[Path], log_level: str) -> None:
-    """CTFd Swiss Army Knife — workspace and API management CLI."""
+    """CSC-CtfShitCli — CTFd workspace and API management."""
     _setup_logging(log_level)
     ctx.ensure_object(dict)
     ctx.obj["env"] = env
     ctx.obj["log_level"] = log_level
     if ctx.invoked_subcommand is None:
-        console.print(BANNER)
+        _print_banner()
         console.print(ctx.get_help())
+
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -199,8 +229,9 @@ def cmd_init(ctx, ctf_url, token, name, force, path):
 @click.option("--id",     "-i", "challenge_id", type=int, default=None, help="CTFd challenge ID.")
 @click.option("--points", "-p", type=int,   default=None, help="Point value.")
 @click.option("--desc",   "-d", default="",               help="Pre-fill README description.")
+@click.option("--lang",   "-l", default="python",         help="Language template (python, pwn, web).")
 @click.pass_context
-def cmd_add(ctx, challenge_path, challenge_id, points, desc):
+def cmd_add(ctx, challenge_path, challenge_id, points, desc, lang):
     """
     Scaffold a challenge directory with templates.
 
@@ -217,7 +248,7 @@ def cmd_add(ctx, challenge_path, challenge_id, points, desc):
       <category>/<name>/.challenge.json — metadata
     """
     try:
-        created = add_challenge(challenge_path, challenge_id, points, desc)
+        created = add_challenge(challenge_path, challenge_id, points, desc, lang=lang)
         render_challenge_added(created["root"], created)
     except FileNotFoundError as e:
         render_error("Workspace Not Found", str(e))
@@ -233,8 +264,9 @@ def cmd_add(ctx, challenge_path, challenge_id, points, desc):
 @click.option("--category", "-c", default=None, help="Filter by category.")
 @click.option("--flat",     "-f", is_flag=True, help="Flat table (no category grouping).")
 @click.option("--no-cache",       is_flag=True, help="Force fresh fetch.")
+@click.option("--offline",        is_flag=True, help="Read from local offline cache.")
 @click.pass_context
-def cmd_list(ctx, category, flat, no_cache):
+def cmd_list(ctx, category, flat, no_cache, offline):
     """
     List challenges, grouped by category.
 
@@ -248,18 +280,26 @@ def cmd_list(ctx, category, flat, no_cache):
 
     async def _run():
         from rich.status import Status
-        async with _make_client(config) as api:
-            scraper = ChallengeScraper(api)
-            with Status("[cyan]Fetching challenges…[/cyan]", console=console):
-                try:
-                    challenges = (
-                        await scraper.get_challenges_by_category(category, use_cache=not no_cache)
-                        if category
-                        else await scraper.fetch_challenges(use_cache=not no_cache)
-                    )
-                except APIError as e:
-                    render_error("Fetch Failed", str(e))
-                    return 1
+        if offline:
+            root = find_workspace_root()
+            if not root or not cache_exists(root):
+                render_error("No Cache", "Run 'ctf sync --offline' first.")
+                return 1
+            with OfflineCache(root) as cache:
+                challenges = cache.get_challenges(category)
+        else:
+            async with _make_client(config) as api:
+                scraper = ChallengeScraper(api)
+                with Status("[cyan]Fetching challenges…[/cyan]", console=console):
+                    try:
+                        challenges = (
+                            await scraper.get_challenges_by_category(category, use_cache=not no_cache)
+                            if category
+                            else await scraper.fetch_challenges(use_cache=not no_cache)
+                        )
+                    except APIError as e:
+                        render_error("Fetch Failed", str(e))
+                        return 1
 
         if not challenges:
             render_info("No Challenges Found",
@@ -298,8 +338,10 @@ def cmd_scrape(ctx, category, no_files):
 @click.option("--overwrite", "-f", is_flag=True, help="Re-download already-existing files.")
 @click.option("--all",       "-a", "pull_all",   is_flag=True,
               help="Sync ALL challenges: scaffold directories and download every attachment.")
+@click.option("--extract",   "-e", is_flag=True, help="Extract downloaded archives.")
+@click.option("--delete-archive", is_flag=True, help="Delete archives after extraction.")
 @click.pass_context
-def cmd_pull(ctx, challenge_id, out, overwrite, pull_all):
+def cmd_pull(ctx, challenge_id, out, overwrite, pull_all, extract, delete_archive):
     """
     Download challenge file attachments.
 
@@ -415,7 +457,7 @@ def cmd_pull(ctx, challenge_id, out, overwrite, pull_all):
                                     challenge_id=ch_id,
                                     dest_dir=created["root"],
                                     overwrite=overwrite,
-                                    show_progress=False,
+                                    show_progress=False, extract=extract, delete_archive=delete_archive,
                                 )
                                 if dl:
                                     files_dl += 1
@@ -489,7 +531,7 @@ def cmd_pull(ctx, challenge_id, out, overwrite, pull_all):
         async with _make_client(config) as api:
             try:
                 downloaded = await download_challenge_files(
-                    api, cid, dest, overwrite, show_progress=True
+                    api, cid, dest, overwrite, show_progress=True, extract=extract, delete_archive=delete_archive
                 )
                 render_download_summary(downloaded, [], dest)
                 return 0
@@ -536,6 +578,14 @@ def cmd_submit(ctx, flag, challenge_id):
                          "Provide --id or run inside a challenge directory.")
             sys.exit(1)
 
+    # Apply flag_format if configured and applicable
+    fmt = config.flag_format
+    if fmt and "{}" in fmt:
+        prefix = fmt.split("{")[0]
+        if not flag.startswith(prefix):
+            flag = fmt.format(flag)
+            console.print(f"[dim]Auto-formatted flag: [cyan]{flag}[/cyan][/dim]")
+
     async def _run():
         from rich.status import Status
         async with _make_client(config) as api:
@@ -543,6 +593,19 @@ def cmd_submit(ctx, flag, challenge_id):
             with Status(f"[cyan]Submitting flag for #{cid}…[/cyan]", console=console):
                 result = await submitter.submit_single_flag(cid, flag)
         submitter.display_single_result(result)
+
+        # Log to local history if we are inside a challenge dir
+        if (Path.cwd() / ".challenge.json").exists():
+            from src.submission_history import log_attempt
+            log_attempt(
+                challenge_dir=Path.cwd(),
+                challenge_id=cid,
+                challenge_name=result.challenge_name,
+                flag=flag,
+                result=result.status,
+                message=result.message,
+                source="submit"
+            )
 
         if result.correct and challenge_id is None:
             from src.workspace_manager import update_challenge_meta
@@ -770,6 +833,250 @@ def cmd_categories(ctx):
         console.print(table)
         return 0
 
+    sys.exit(asyncio.run(_run()))
+
+
+
+
+# ── V3.0 COMMANDS ─────────────────────────────────────────────────────────────
+
+@cli.group("hint")
+def cmd_hint_group():
+    """Manage challenge hints."""
+    pass
+
+@cmd_hint_group.command("list")
+@click.option("--id", "-i", "challenge_id", type=int, default=None, help="Challenge ID.")
+@click.pass_context
+def cmd_hint_list(ctx, challenge_id):
+    """List hints for a challenge."""
+    config = _load_config(ctx.obj)
+    cid = challenge_id
+    if cid is None:
+        meta = detect_challenge_context()
+        if meta and meta.get("id"):
+            cid = int(meta["id"])
+        else:
+            render_error("ID Required", "Provide --id or run inside a challenge directory.")
+            sys.exit(1)
+
+    async def _run():
+        async with _make_client(config) as api:
+            hm = HintManager(api)
+            await hm.list_hints(cid)
+    sys.exit(asyncio.run(_run()))
+
+@cmd_hint_group.command("unlock")
+@click.option("--id", "-i", "hint_id", type=int, required=True, help="Hint ID to unlock.")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt.")
+@click.pass_context
+def cmd_hint_unlock(ctx, hint_id, yes):
+    """Unlock a specific hint."""
+    config = _load_config(ctx.obj)
+    async def _run():
+        async with _make_client(config) as api:
+            hm = HintManager(api)
+            await hm.unlock_hint(hint_id, confirmed=yes)
+    sys.exit(asyncio.run(_run()))
+
+
+@cli.command("submissions")
+@click.option("--id", "-i", "challenge_id", type=int, default=None, help="Challenge ID.")
+@click.pass_context
+def cmd_submissions(ctx, challenge_id):
+    """View local submission history for a challenge."""
+    root = find_workspace_root()
+    if not root:
+        render_error("No Workspace", "Run 'ctf init' first.")
+        sys.exit(1)
+
+    cid = challenge_id
+    if cid is None:
+        meta = detect_challenge_context()
+        if meta and meta.get("id"):
+            cid = int(meta["id"])
+        else:
+            render_error("ID Required", "Provide --id or run inside a challenge directory.")
+            sys.exit(1)
+
+    res = find_attempts_for_challenge(root, cid)
+    if res:
+        _, attempts = res
+        render_submission_history(attempts, cid)
+    else:
+        render_info("No Submissions", f"No local submissions found for challenge #{cid}.")
+    sys.exit(0)
+
+
+@cli.group("export")
+def cmd_export_group():
+    """Export workspace data."""
+    pass
+
+@cmd_export_group.command("writeups")
+@click.option("--out", "-o", default="writeups.md", help="Output Markdown file.")
+def cmd_export_writeups(out):
+    """Export solved challenges to a Markdown writeup."""
+    root = find_workspace_root()
+    if not root:
+        render_error("No Workspace", "Run 'ctf init' first.")
+        sys.exit(1)
+
+    success, count, stats = export_writeups(root, Path(out))
+    if success:
+        console.print(f"\n[green]✔ Writeups exported: {count} challenges[/green]")
+    else:
+        sys.exit(1)
+
+
+@cli.command("watch")
+@click.option("--all", "-a", "watch_all", is_flag=True, help="Watch entire workspace.")
+@click.pass_context
+def cmd_watch(ctx, watch_all):
+    """Watch for flag.txt changes and auto-submit."""
+    config = _load_config(ctx.obj)
+    root = find_workspace_root()
+    if not root:
+        render_error("No Workspace", "Run 'ctf init' first.")
+        sys.exit(1)
+
+    target_dir = root if watch_all else Path.cwd()
+
+    async def _run():
+        async with _make_client(config) as api:
+            await start_watch_daemon(target_dir, api, config)
+    try:
+        sys.exit(asyncio.run(_run()))
+    except KeyboardInterrupt:
+        sys.exit(0)
+
+
+@cli.command("sync")
+@click.option("--offline", is_flag=True, help="Sync challenges to offline cache.")
+@click.pass_context
+def cmd_sync(ctx, offline):
+    """Sync workspace data."""
+    if not offline:
+        render_error("Missing Option", "Currently only --offline sync is supported.")
+        sys.exit(1)
+
+    config = _load_config(ctx.obj)
+    root = find_workspace_root()
+    if not root:
+        render_error("No Workspace", "Run 'ctf init' first.")
+        sys.exit(1)
+
+    async def _run():
+        from rich.status import Status
+        from src.challenge_scraper import ChallengeScraper
+        async with _make_client(config) as api:
+            scraper = ChallengeScraper(api)
+            with Status("[cyan]Fetching for offline cache…[/cyan]", console=console):
+                try:
+                    challenges = await scraper.fetch_challenges(use_cache=False)
+                    # Also fetch team solves if applicable
+                    team_info = await api.get_team_solves()
+                    team_solves = set(s.get("challenge_id") for s in team_info.get("solves", [])) if team_info else None
+                except APIError as e:
+                    render_error("Fetch Failed", str(e))
+                    return 1
+
+            with OfflineCache(root) as cache:
+                cache.upsert_challenges(challenges, solved_team_ids=team_solves)
+            
+            render_success("Sync Complete", f"Cached {len(challenges)} challenges.")
+            return 0
+    sys.exit(asyncio.run(_run()))
+
+
+@cli.group("script")
+def cmd_script_group():
+    """Generate universal CTF solution scripts."""
+    pass
+
+@cmd_script_group.command("list")
+def cmd_script_list():
+    """List available CTF solution scripts."""
+    from src.script_manager import get_available_scripts
+    from rich.table import Table as RTable
+    
+    scripts_by_category = get_available_scripts()
+    
+    table = RTable(
+        title="[bold cyan]🛠️ Available CTF Scripts[/bold cyan]",
+        border_style="bright_black", header_style="bold cyan",
+    )
+    table.add_column("Category", style="bold yellow", width=15)
+    table.add_column("Script Name", style="bold magenta", width=25)
+    table.add_column("Description", style="white")
+    
+    for category, scripts in scripts_by_category.items():
+        first = True
+        for name, desc in scripts.items():
+            if first:
+                table.add_row(category, name, desc)
+                first = False
+            else:
+                table.add_row("", name, desc)
+                
+    console.print(table)
+    return 0
+
+@cmd_script_group.command("generate")
+@click.argument("script_name")
+@click.option("--out", "-o", type=click.Path(file_okay=False, path_type=Path), default=None,
+              help="Output directory (default: cwd).")
+def cmd_script_generate(script_name, out):
+    """Generate a specific CTF solution script in the current directory."""
+    from src.script_manager import generate_script
+    
+    dest = (out or Path.cwd()).resolve()
+    dest.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        file_path = generate_script(script_name, dest)
+        render_success("Script Generated", f"Saved to [bold white]{file_path}[/bold white]")
+        return 0
+    except ValueError as e:
+        render_error("Generation Failed", str(e))
+        # Provide helpful hint
+        from src.script_manager import get_available_scripts
+        available = []
+        for cat_scripts in get_available_scripts().values():
+             available.extend(cat_scripts.keys())
+        console.print(f"[dim]Available scripts: {', '.join(available)}[/dim]")
+        return 1
+    except Exception as e:
+        render_error("Error", f"Failed to generate script: {e}")
+        return 1
+
+
+@cli.group("ai")
+def cmd_ai_group():
+    """Otonom AI Analysis and Strategy."""
+    pass
+
+@cmd_ai_group.command("analyze")
+@click.pass_context
+def cmd_ai_analyze(ctx):
+    """Analyze the current challenge directory with AI."""
+    config = _load_config(ctx.obj)
+    
+    api_key = config.llm_api_key
+    if not api_key:
+        render_error(
+            "API Key Missing", 
+            "LLM API Key eksik. Lütfen .env dosyanıza LLM_API_KEY ekleyin veya 'ctf set llm_api_key <key>' komutunu kullanın."
+        )
+        sys.exit(1)
+        
+    cwd = Path.cwd()
+    
+    async def _run():
+        from src.ai_assistant import analyze_challenge_with_llm
+        success = await analyze_challenge_with_llm(cwd, api_key)
+        return 0 if success else 1
+        
     sys.exit(asyncio.run(_run()))
 
 

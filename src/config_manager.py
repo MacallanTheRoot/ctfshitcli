@@ -7,6 +7,9 @@ v2.0 Changes:
   - Added resolve_config() — tries workspace config → env file (priority cascade)
   - Relaxed HTTPS-only enforcement: http:// allowed for local CTFd instances
   - Pydantic v2 compatible (removed deprecated @validator, uses @field_validator)
+
+v3.0 Changes:
+  - Added discord_webhook_url (Optional[str]) — for Discord notification support
 """
 
 import json
@@ -65,6 +68,31 @@ class CTFdConfig(BaseModel):
         default="",
         description="Human-readable CTF event name",
     )
+    discord_webhook_url: Optional[str] = Field(
+        default=None,
+        description="Discord webhook URL for flag-solved notifications (optional)",
+    )
+    llm_api_key: str = Field(
+        default="",
+        description="API key for LLM-based autonomous analysis",
+    )
+    flag_format: str = Field(
+        default="",
+        description="Optional flag format (e.g. FlagTryna{})",
+    )
+
+    @field_validator("discord_webhook_url", mode="before")
+    @classmethod
+    def validate_discord_webhook(cls, v: Optional[str]) -> Optional[str]:
+        """Normalize Discord webhook URL; accept None to disable notifications."""
+        if v is None or str(v).strip() == "":
+            return None
+        url = str(v).strip().rstrip("/")
+        if not (url.startswith("https://") or url.startswith("http://")):
+            raise ValueError(
+                f"discord_webhook_url must start with http:// or https://, got: {url!r}"
+            )
+        return url
 
     @field_validator("ctf_url", mode="before")
     @classmethod
@@ -179,6 +207,21 @@ class ConfigManager:
         return self.config.log_level
 
     @property
+    def discord_webhook_url(self) -> Optional[str]:
+        """Discord webhook URL for flag-solved notifications (None if not set)."""
+        return self.config.discord_webhook_url
+        
+    @property
+    def llm_api_key(self) -> str:
+        """API key for LLM analysis."""
+        return self.config.llm_api_key
+
+    @property
+    def flag_format(self) -> str:
+        """Flag format for submissions and watching."""
+        return self.config.flag_format
+
+    @property
     def authorization_header(self) -> dict:
         """Authorization header dict for API requests."""
         return {
@@ -231,6 +274,9 @@ def load_from_env(env_path: Optional[Path] = None) -> ConfigManager:
             api_timeout=int(os.getenv("API_TIMEOUT", 15)),
             max_retries=int(os.getenv("MAX_RETRIES", 3)),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
+            discord_webhook_url=os.getenv("DISCORD_WEBHOOK_URL") or None,
+            llm_api_key=os.getenv("LLM_API_KEY", ""),
+            flag_format=os.getenv("FLAG_FORMAT", ""),
         )
     except (ValueError, TypeError) as e:
         raise ValueError(
@@ -277,6 +323,9 @@ def load_from_workspace(config_path: Path) -> ConfigManager:
             api_timeout=int(raw.get("api_timeout", 15)),
             max_retries=int(raw.get("max_retries", 3)),
             log_level=raw.get("log_level", "INFO"),
+            discord_webhook_url=raw.get("discord_webhook_url") or None,
+            llm_api_key=raw.get("llm_api_key", ""),
+            flag_format=raw.get("flag_format", ""),
         )
     except (ValueError, TypeError) as e:
         raise ValueError(

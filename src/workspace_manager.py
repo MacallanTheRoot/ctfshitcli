@@ -165,6 +165,105 @@ if __name__ == "__main__":
 '''
 
 
+def _solve_pwn_template(category: str, name: str) -> str:
+    """Generate a pwntools solve.py template for a challenge."""
+    return f'''#!/usr/bin/env python3
+"""
+CTF Challenge: {name}
+Category: {category}
+Date: {datetime.now().strftime("%Y-%m-%d")}
+"""
+
+import os
+import sys
+from pwn import *
+
+# ─── Configuration ─────────────────────────────────────────────────────────
+
+# Set up pwntools context
+exe = context.binary = ELF('./{name}') if os.path.exists('./{name}') else None
+host = args.HOST or 'localhost'
+port = int(args.PORT or 1337)
+
+def start_local(argv=[], *a, **kw):
+    """Execute the target binary locally"""
+    if args.GDB:
+        return gdb.debug([exe.path] + argv, gdbscript=gdbscript, *a, **kw)
+    else:
+        return process([exe.path] + argv, *a, **kw)
+
+def start_remote(argv=[], *a, **kw):
+    """Connect to the target"""
+    return remote(host, port, *a, **kw)
+
+def start(argv=[], *a, **kw):
+    """Start the exploit against the target"""
+    if args.LOCAL:
+        return start_local(argv, *a, **kw)
+    else:
+        return start_remote(argv, *a, **kw)
+
+gdbscript = \\'\\'\\'
+continue
+\\'\\'\\'.format(**locals())
+
+# ─── Exploit ───────────────────────────────────────────────────────────────
+
+def main():
+    io = start()
+
+    # Your exploit goes here...
+    
+    io.interactive()
+
+if __name__ == '__main__':
+    main()
+'''
+
+
+def _solve_web_template(category: str, name: str) -> str:
+    """Generate a requests solve.py template for a web challenge."""
+    return f'''#!/usr/bin/env python3
+"""
+CTF Challenge: {name}
+Category: {category}
+Date: {datetime.now().strftime("%Y-%m-%d")}
+"""
+
+import requests
+import urllib3
+
+# Disable insecure request warnings if using proxy/self-signed certs
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ─── Configuration ─────────────────────────────────────────────────────────
+
+TARGET_URL = "http://localhost:1337"
+
+# Useful for routing traffic through BurpSuite
+PROXIES = {{
+    # "http": "http://127.0.0.1:8080",
+    # "https": "http://127.0.0.1:8080"
+}}
+
+def main():
+    session = requests.Session()
+    session.proxies.update(PROXIES)
+    session.verify = False # Ignore proxy cert errors
+    
+    print(f"[*] Targeting {{TARGET_URL}}")
+
+    # ─── Exploit ───────────────────────────────────────────────────────────────
+
+    # Example:
+    # r = session.get(f"{{TARGET_URL}}/")
+    # print(r.text)
+
+if __name__ == "__main__":
+    main()
+'''
+
+
 def _notes_txt_template(category: str, name: str) -> str:
     """Generate a quick notes.txt for categories that don't suit Python."""
     return f"""# {name.upper()} [{category.upper()}]
@@ -343,6 +442,7 @@ def add_challenge(
     points: Optional[int] = None,
     description: str = "",
     workspace_root: Optional[Path] = None,
+    lang: str = "python",
 ) -> dict:
     """
     Scaffold a challenge directory structure.
@@ -385,38 +485,16 @@ def add_challenge(
 
     created = {"root": challenge_dir}
 
-    # README.md
-    readme_path = challenge_dir / "README.md"
-    if not readme_path.exists():
-        content = _readme_template(category, name_slug)
-        if description:
-            content = content.replace(
-                "<!-- Paste the challenge description here -->",
-                description,
-            )
-        with open(readme_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        created["readme"] = readme_path
-        logger.info(f"Created README.md: {readme_path}")
-
-    # solve.py (for most categories) or notes.txt for misc/forensics
-    SCRIPT_CATEGORIES = {"web", "pwn", "rev", "crypto", "misc", "blockchain"}
-    NOTES_CATEGORIES = {"osint", "trivia", "stego", "steganography"}
-
-    if category.lower() in NOTES_CATEGORIES:
-        notes_path = challenge_dir / "notes.txt"
-        if not notes_path.exists():
-            with open(notes_path, "w", encoding="utf-8") as f:
-                f.write(_notes_txt_template(category, name_slug))
-            created["notes_txt"] = notes_path
-            logger.info(f"Created notes.txt: {notes_path}")
-    else:
-        solve_path = challenge_dir / "solve.py"
-        if not solve_path.exists():
-            with open(solve_path, "w", encoding="utf-8") as f:
-                f.write(_solve_py_template(category, name_slug))
-            created["solve_py"] = solve_path
-            logger.info(f"Created solve.py: {solve_path}")
+    # challenge.txt
+    challenge_txt_path = challenge_dir / "challenge.txt"
+    if not challenge_txt_path.exists():
+        with open(challenge_txt_path, "w", encoding="utf-8") as f:
+            if description:
+                f.write(description)
+            else:
+                f.write("<!-- Soru açıklaması buraya gelecek -->\n")
+        created["challenge_txt"] = challenge_txt_path
+        logger.info(f"Created challenge.txt: {challenge_txt_path}")
 
     # .challenge.json metadata
     meta_path = challenge_dir / CHALLENGE_META_FILENAME
@@ -482,6 +560,11 @@ CONFIG_KEY_ALIASES: dict = {
     "poll_interval": "poll_interval",
     "log":           "log_level",
     "log_level":     "log_level",
+    "discord":       "discord_webhook_url",
+    "discord_webhook_url": "discord_webhook_url",
+    "llm":           "llm_api_key",
+    "llm_api_key":   "llm_api_key",
+    "flag_format":   "flag_format",
 }
 
 # Fields that should be cast to int before writing

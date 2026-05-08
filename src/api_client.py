@@ -7,6 +7,12 @@ Changes in v2.0:
     (replaces the incorrect /challenges/{id}/solve used in v1)
   - Added download_file() for streaming file downloads
   - Added get_challenge_files() convenience method
+
+Changes in v3.0:
+  - Added get_hints()    → GET  /api/v1/hints?challenge_id={id}
+  - Added get_hint()     → GET  /api/v1/hints/{id}  (returns content if unlocked)
+  - Added unlock_hint()  → POST /api/v1/unlocks      body: {target, type: "hints"}
+  - Added get_team_solves() → GET /api/v1/teams/me   (None on 404 = user-mode CTFd)
 """
 
 import asyncio
@@ -382,3 +388,96 @@ class CTFdAPIClient:
         except APIError as e:
             logger.warning(f"Could not validate token: {e}")
             return False
+
+    # ── Hints ─────────────────────────────────────────────────────────────────
+
+    async def get_hints(self, challenge_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch all hints for a specific challenge.
+
+        Returns a list of hint objects. For locked hints, 'content' will be
+        None. For unlocked hints, 'content' contains the hint text.
+
+        CTFd endpoint: GET /api/v1/hints?challenge_id={id}
+
+        Args:
+            challenge_id: Challenge ID to fetch hints for.
+
+        Returns:
+            List of hint dicts with fields: id, challenge_id, cost, content.
+        """
+        logger.debug(f"Fetching hints for challenge {challenge_id}")
+        response = await self._request(
+            "GET", "/api/v1/hints", params={"challenge_id": challenge_id}
+        )
+        return response.get("data", [])
+
+    async def get_hint(self, hint_id: int) -> Dict[str, Any]:
+        """
+        Fetch a single hint by ID.
+
+        If the hint has already been unlocked (or is free), 'content' will
+        contain the hint text. Otherwise 'content' will be None.
+
+        CTFd endpoint: GET /api/v1/hints/{id}
+
+        Args:
+            hint_id: Hint ID.
+
+        Returns:
+            Hint dict with fields: id, challenge_id, cost, content.
+        """
+        logger.debug(f"Fetching hint {hint_id}")
+        response = await self._request("GET", f"/api/v1/hints/{hint_id}")
+        return response.get("data", {})
+
+    async def unlock_hint(self, hint_id: int) -> Dict[str, Any]:
+        """
+        Unlock (purchase) a hint, deducting its cost from the team/user score.
+
+        CTFd endpoint: POST /api/v1/unlocks
+        Body: {"target": <hint_id>, "type": "hints"}
+
+        After a successful unlock, call get_hint(hint_id) to retrieve the
+        content — the unlock response itself does not return the hint text.
+
+        Args:
+            hint_id: ID of the hint to unlock.
+
+        Returns:
+            Unlock response dict (success bool + data).
+
+        Raises:
+            APIError: If unlock fails (e.g. insufficient points).
+        """
+        logger.info(f"Unlocking hint {hint_id}")
+        response = await self._request(
+            "POST",
+            "/api/v1/unlocks",
+            data={"target": hint_id, "type": "hints"},
+        )
+        return response
+
+    # ── Team ─────────────────────────────────────────────────────────────────
+
+    async def get_team_solves(self) -> Optional[Dict[str, Any]]:
+        """
+        Fetch the current team's information and solve list.
+
+        Only works on team-mode CTFd instances. Returns None on 404
+        (user-mode CTFd) so the caller can fall back to solved_by_me logic.
+
+        CTFd endpoint: GET /api/v1/teams/me
+
+        Returns:
+            Team dict (includes 'solves' list) or None if user-mode CTFd.
+        """
+        logger.debug("Fetching team info (team mode)")
+        try:
+            response = await self._request("GET", "/api/v1/teams/me")
+            return response.get("data", {})
+        except NotFoundError:
+            logger.info(
+                "GET /api/v1/teams/me returned 404 — this is a user-mode CTFd instance."
+            )
+            return None

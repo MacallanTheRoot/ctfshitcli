@@ -63,11 +63,14 @@ def render_challenges_table(
         points   = str(ch.get("value", 0))
         solved   = ch.get("solved_by_me", False)
 
-        status = (
-            "[bold green]✔ Solved[/bold green]"
-            if solved
-            else "[red]○ Unsolved[/red]"
-        )
+        team_solved = ch.get("solved_by_team", False)
+
+        if solved:
+            status = "[bold green]✔ Siz Çözdünüz[/bold green]"
+        elif team_solved:
+            status = "[bold blue]✔ Takım Çözdü[/bold blue]"
+        else:
+            status = "[red]○ Çözülmedi[/red]"
 
         if show_files:
             file_count = str(len(ch.get("files", []))) if ch.get("files") else "—"
@@ -148,13 +151,15 @@ def render_challenges_by_category(
         table.add_column("Files",  style="bright_black", width=5,  justify="center")
 
         for ch in sorted(chs, key=lambda x: x.get("value", 0)):
-            solved    = ch.get("solved_by_me", False)
+            team_solved = ch.get("solved_by_team", False)
             file_cnt  = len(ch.get("files", []))
-            status    = (
-                "[bold green]✔ Solved[/bold green]"
-                if solved
-                else "[red]○ Open[/red]"
-            )
+            
+            if solved:
+                status = "[bold green]✔ Siz Çözdünüz[/bold green]"
+            elif team_solved:
+                status = "[bold blue]✔ Takım Çözdü[/bold blue]"
+            else:
+                status = "[red]○ Çözülmedi[/red]"
             table.add_row(
                 str(ch.get("id", "?")),
                 ch.get("name", "Unknown"),
@@ -479,29 +484,20 @@ def render_config_panel(config) -> None:
 # ─── Download Summary ─────────────────────────────────────────────────────────
 
 def render_download_summary(
-    downloaded: list,
-    failed: list,
+    downloaded: List[str],
+    failed: List[str],
     dest_dir: Path,
 ) -> None:
-    """
-    Render download completion summary.
-
-    Args:
-        downloaded: List of successfully downloaded Paths.
-        failed:     List of failed filename strings.
-        dest_dir:   Destination directory.
-    """
-    if not downloaded and not failed:
-        render_info("No files to download", "This challenge has no file attachments.")
-        return
-
+    """Render summary of downloaded files."""
     lines = []
-    for path in downloaded:
-        size = path.stat().st_size if path.exists() else 0
-        size_str = _fmt_size(size)
-        lines.append(f"  [green]✔[/green] {path.name} [dim]({size_str})[/dim]")
-    for name in failed:
-        lines.append(f"  [red]✗[/red] {name} [dim](failed)[/dim]")
+    if downloaded:
+        lines.append(f"[bold green]✔ Downloaded {len(downloaded)} files[/bold green]")
+        for f in downloaded:
+            lines.append(f"  [dim]↳ {f}[/dim]")
+    if failed:
+        lines.append(f"[bold red]✗ Failed to download {len(failed)} files[/bold red]")
+        for f in failed:
+            lines.append(f"  [dim]↳ {f}[/dim]")
 
     content = "\n".join(lines) + f"\n\n[dim]→ {dest_dir}[/dim]"
     style   = "green" if not failed else "yellow"
@@ -513,6 +509,73 @@ def render_download_summary(
     console.print(
         Panel(content, title=title, style=style, expand=False, padding=(1, 2))
     )
+
+def render_hints_table(hints: List[Dict[str, Any]]) -> None:
+    """Render hints table (ID, Cost, Status)."""
+    if not hints:
+        render_info("No hints available for this challenge.")
+        return
+
+    table = Table(
+        title="[bold cyan]💡 Challenge Hints[/bold cyan]",
+        border_style="bright_black",
+        header_style="bold cyan",
+        show_lines=False,
+        expand=False,
+    )
+    table.add_column("ID", style="dim", width=5, justify="right")
+    table.add_column("Cost", style="yellow", width=6, justify="right")
+    table.add_column("Status", style="white", width=12)
+
+    for hint in hints:
+        h_id = str(hint.get("id", "?"))
+        cost = str(hint.get("cost", 0))
+        # Depending on CTFd data, it might have 'content' if unlocked or just a boolean
+        unlocked = hint.get("content") is not None or hint.get("unlocked", False)
+        status = "[bold green]Unlocked[/bold green]" if unlocked else "[dim]Locked[/dim]"
+        table.add_row(h_id, cost, status)
+
+    console.print(table)
+
+
+def render_submission_history(attempts: List[Dict[str, Any]], challenge_id: Optional[int] = None) -> None:
+    """Render submission history table (Time, Flag, Status)."""
+    title = "[bold cyan]📜 Submission History[/bold cyan]"
+    if challenge_id is not None:
+        title = f"[bold cyan]📜 Submission History (Challenge #{challenge_id})[/bold cyan]"
+
+    if not attempts:
+        render_info("No local submissions found.")
+        return
+
+    table = Table(
+        title=title,
+        border_style="bright_black",
+        header_style="bold cyan",
+        show_lines=False,
+        expand=False,
+    )
+    table.add_column("Time", style="dim", width=22)
+    table.add_column("Flag", style="white", width=35)
+    table.add_column("Status", style="white", width=15)
+
+    for att in attempts:
+        time_str = att.get("time", att.get("timestamp", "Unknown"))
+        flag = att.get("flag", "Unknown")
+        status_val = att.get("status", "")
+        correct = att.get("correct", False)
+        
+        if correct or status_val == "correct":
+            status = "[bold green]✔ Correct[/bold green]"
+        elif status_val == "already_solved":
+            status = "[yellow]★ Already Solved[/yellow]"
+        else:
+            status = "[bold red]✗ Incorrect[/bold red]"
+
+        table.add_row(time_str, flag, status)
+
+    console.print(table)
+
 
 
 def _fmt_size(n: int) -> str:
